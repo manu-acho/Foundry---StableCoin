@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
+
+/* 
+import {DecentralizedStableCoin} from "./DecentralizedStableCoin.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+
+
+To modify the DSCEngine contract so that different tokens used as collateral can have different liquidation thresholds, you'll need to adjust the design to include a mapping that stores the liquidation thresholds for each token type. This allows greater flexibility and tailored risk management based on the volatility or market characteristics of each collateral type.
+
+// 1. Add a New Mapping for Liquidation Thresholds
+
+    mapping(address => uint256) private tokenLiquidationThresholds;
+
+// 2. Modify Constructor for Threshold Initialization
+
+You can modify the constructor or create a new initialization function to set the liquidation thresholds for each token when deploying the contract or afterwards.
+
+constructor(
+    address[] memory tokenAddresses,
+    address[] memory priceFeedAddresses,
+    address _dscAddress,
+    uint256[] memory liquidationThresholds
+) {
+    if (tokenAddresses.length != priceFeedAddresses.length || tokenAddresses.length != liquidationThresholds.length) {
+        revert DSCEngine_tokenAddressesLengthDoesNotMatchPriceFeedAddressesLength();
+    }
+    for (uint256 i = 0; i < tokenAddresses.length; i++) {
+        s_priceFeeds[tokenAddresses[i]] = priceFeedAddresses[i];
+        s_collateralTokens.push(tokenAddresses[i]);
+        tokenLiquidationThresholds[tokenAddresses[i]] = liquidationThresholds[i];
+    }
+    i_dsc = DecentralizedStableCoin(_dscAddress);
+}
+
+// 3. Modify the _healthFactor Function
+
+// Adjust the _healthFactor function to use the liquidation threshold specific to the token used as collateral.
+
+function _healthFactor(address user, address token) private view returns (uint256) {
+    (uint256 totalDscMinted, uint256 collateralValInUsd) = _getAccountInformation(user);
+    uint256 liquidationThreshold = tokenLiquidationThresholds[token];
+    uint256 collateralAdjustedforThreshold = (collateralValInUsd * liquidationThreshold) / LIQUIDATION_PRECISION;
+    return (collateralAdjustedforThreshold * PRECISION) / totalDscMinted;
+}
+
+// 4. Update Calls to _healthFactor
+
+Since _healthFactor now requires a token parameter, update all calls to this function to pass the appropriate token.
+
+// 5. Optional: Create a Management Function for Thresholds
+
+Optionally, add functions to manage liquidation thresholds dynamically, allowing updates post-deployment by authorized users (like admins).
+
+function setLiquidationThreshold(address token, uint256 threshold) public onlyOwner {
+    tokenLiquidationThresholds[token] = threshold;
+}
+
+// Remember to modify the helperconfig contract to include the liquidation thresholds when deploying the DSCEngine contract.
+
+
+*/
+
+/*
+// HelperConfig contract with liquidation thresholds
+
+1. Modify the NetworkConfig struct to include liquidation thresholds
+
+struct NetworkConfig {
+    address wethUsdPriceFeed;
+    address wbtcUsdPriceFeed;
+    address weth;
+    address wbtc;
+    uint256 deployerKey;
+    uint256 wethLiquidationThreshold;
+    uint256 wbtcLiquidationThreshold;
+}
+
+2. Update Configuration Functions
+
+function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
+    return
+        NetworkConfig({
+            wethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306,
+            wbtcUsdPriceFeed: 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43,
+            weth: 0xdd13E55209Fd76AfE204dBda4007C227904f0a81,
+            wbtc: 0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063,
+            deployerKey: vm.envUint("PRIVATE_KEY_SEP"),
+            wethLiquidationThreshold: 8000, // 80% expressed in basis points
+            wbtcLiquidationThreshold: 7500 // 75%
+        });
+}
+
+function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
+    if (activeNetworkConfig.wethUsdPriceFeed != address(0)) {
+        return activeNetworkConfig;
+    }
+    // Create mock price feeds and tokens
+    vm.startBroadcast();
+    MockV3Aggregator wethUsdPriceFeed = new MockV3Aggregator(
+        DECIMALS,
+        WETH_USD_PRICE
+    );
+    MockV3Aggregator wbtcUsdPriceFeed = new MockV3Aggregator(
+        DECIMALS,
+        WBTC_USD_PRICE
+    );
+    ERC20Mock wethMock = new ERC20Mock();
+    ERC20Mock wbtcMock = new ERC20Mock();
+    vm.stopBroadcast();
+
+    return
+        NetworkConfig({
+            wethUsdPriceFeed: address(wethUsdPriceFeed),
+            wbtcUsdPriceFeed: address(wbtcUsdPriceFeed),
+            weth: address(wethMock),
+            wbtc: address(wbtcMock),
+            deployerKey: vm.envUint("DEFAULT_ANVIL_KEY"),
+            wethLiquidationThreshold: 8000, // 80%
+            wbtcLiquidationThreshold: 7500 // 75%
+        });
+}
+
+ */
+
+/*
+// DeployDSC contract with liquidation thresholds
+1. Add an array to store liquidation thresholds
+    uint256[] public liquidationThresholds;
+
+2. Modify the run function to include liquidation thresholds
+
+import {Script} from "forge-std/Script.sol";
+import {DSCEngine} from "src/DSCEngine.sol";
+import {DecentralizedStableCoin} from "src/DecentralizedStableCoin.sol";
+import {HelperConfig} from "script/HelperConfig.s.sol";
+
+contract DeployDSC is Script {
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+    uint256[] public liquidationThresholds;  // Array for liquidation thresholds
+
+    function run() external returns (DecentralizedStableCoin, DSCEngine, HelperConfig) {
+        HelperConfig helperConfig = new HelperConfig();
+        (
+            address wethUsdPriceFeed,
+            address wbtcUsdPriceFeed,
+            address weth,
+            address wbtc,
+            uint256 deployerKey,
+            uint256 wethThreshold,
+            uint256 wbtcThreshold
+        ) = helperConfig.activeNetworkConfig();  // Ensure this method now also returns thresholds
+
+        tokenAddresses = [weth, wbtc];
+        priceFeedAddresses = [wethUsdPriceFeed, wbtcUsdPriceFeed];
+        liquidationThresholds = [wethThreshold, wbtcThreshold];  // Set the liquidation thresholds
+
+        vm.startBroadcast(deployerKey);
+        DecentralizedStableCoin dsc = new DecentralizedStableCoin();
+        
+        // Pass the thresholds to the DSCEngine constructor
+        DSCEngine dscEngine = new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc), liquidationThresholds);
+        dsc.transferOwnership(address(dscEngine));
+        vm.stopBroadcast();
+        
+        return (dsc, dscEngine, helperConfig);
+    }
+}
+
+ */
+
+

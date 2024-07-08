@@ -12,3 +12,8 @@ docs/
 
 # Dotenv file
 .env
+
+# Others
+DSCEngineWithFee.t.sol
+DeployDSCWithFee.s.sol
+DSCEngineWithFee.sol
